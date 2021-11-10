@@ -11,8 +11,8 @@ public class UploadServiceImpl implements UploadService {
     private static final Logger logger = LoggerFactory.getLogger(UploadServiceImpl.class);
 
     @Override
-    public boolean checkFileExtension(String fileName) {
-        logger.info("Check file extension: {}", fileName);
+    public boolean checkFileExtension(FileInfo fileInfo) {
+        logger.info("Check file extension: {}", fileInfo);
         return true;
     }
 

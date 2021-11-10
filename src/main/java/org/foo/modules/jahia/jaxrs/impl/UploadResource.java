@@ -87,7 +87,7 @@ public class UploadResource {
             File assembledFile = writeFile(tempDir, fileItem, fileInfo, fileFullLength, chunkFrom, chunkTo);
             if (assembledFile != null) {
                 for (UploadService uploadService : uploadServiceRegistrator.getUploadServices()) {
-                    if (uploadService.checkFileExtension(fileItem.getName())) {
+                    if (uploadService.checkFileExtension(fileInfo)) {
                         uploadService.uploadFile(fileInfo);
                     }
                 }

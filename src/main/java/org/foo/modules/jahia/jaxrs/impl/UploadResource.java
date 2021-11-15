@@ -22,7 +22,6 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.*;
 import java.util.*;
-import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
 @Path("/upload-file")
@@ -55,7 +54,7 @@ public class UploadResource {
             List<UploadService> uploadServices = uploadServiceRegistrator.getUploadServices();
             if (!uploadServices.isEmpty()) {
                 try {
-                    File tempDir = new File(System.getProperty("java.io.tmpdir"));
+                    File tempDir = new File(System.getProperty("java.io.tmpdir"), httpServletRequest.getSession().getId());
                     List<FileItem> items = new ServletFileUpload(new DiskFileItemFactory(10000000, tempDir)).parseRequest(httpServletRequest);
                     Iterator<FileItem> it = items.iterator();
                     List<FileInfo> filesInfo = new ArrayList<>();
@@ -66,11 +65,25 @@ public class UploadResource {
                         if (item.isFormField()) {
                             formData.put(item.getFieldName(), item.getString());
                         } else {
-                            fileInfo = uploadFileItem(item, uploadServiceRegistrator, tempDir, fileFullLength, chunkFrom, chunkTo);
+                            fileInfo = new FileInfo(item.getName(), item.getContentType());
+                            writeFile(tempDir, item, fileInfo, fileFullLength, chunkFrom, chunkTo);
                             filesInfo.add(fileInfo);
                         }
                     }
-                    filesInfo.forEach(fi -> fi.setFormData(formData));
+                    filesInfo.forEach(fi -> {
+                        fi.setFormData(formData);
+                        if (fi.isComplete()) {
+                            boolean remove = true;
+                            for (UploadService uploadService : uploadServiceRegistrator.getUploadServices()) {
+                                if (uploadService.checkFileExtension(fi)) {
+                                    remove &= uploadService.uploadFile(fi);
+                                }
+                            }
+                            if (remove) {
+                                FileUtils.deleteQuietly(new File(fi.getServerPath()).getParentFile());
+                            }
+                        }
+                    });
                     return Response.status(Response.Status.OK).entity(new ObjectMapper().writeValueAsString(filesInfo)).type(MediaType.APPLICATION_JSON).build();
                 } catch (Exception e) {
                     logger.error("", e);
@@ -81,28 +94,17 @@ public class UploadResource {
         return Response.ok().build();
     }
 
-    private FileInfo uploadFileItem(FileItem fileItem, UploadServiceRegistrator uploadServiceRegistrator, File tempDir, long fileFullLength, long chunkFrom, long chunkTo) {
-        FileInfo fileInfo = new FileInfo(fileItem.getName(), fileItem.getContentType());
-        try {
-            File assembledFile = writeFile(tempDir, fileItem, fileInfo, fileFullLength, chunkFrom, chunkTo);
-            if (assembledFile != null) {
-                for (UploadService uploadService : uploadServiceRegistrator.getUploadServices()) {
-                    if (uploadService.checkFileExtension(fileInfo)) {
-                        uploadService.uploadFile(fileInfo);
-                    }
-                }
-                FileUtils.deleteQuietly(assembledFile.getParentFile());
+    private void writeFile(File tempDir, FileItem fileItem, FileInfo fileInfo, long fileFullLength, long chunkFrom, long chunkTo) throws Exception {
+        if (!tempDir.exists()) {
+            if (!tempDir.mkdir()) {
+                throw new FileNotFoundException(tempDir.getAbsolutePath());
             }
-        } catch (Exception e) {
-            logger.error("", e);
         }
-        return fileInfo;
-    }
-
-    private File writeFile(File tempDir, FileItem fileItem, FileInfo fileInfo, long fileFullLength, long chunkFrom, long chunkTo) throws Exception {
         File dir = new File(tempDir, fileItem.getName());
         if (!dir.exists()) {
-            dir.mkdir();
+            if (!dir.mkdir()) {
+                throw new FileNotFoundException(dir.getAbsolutePath());
+            }
         }
         File assembledFile = null;
         if (fileFullLength < 0) {  // File is not chunked
@@ -126,7 +128,6 @@ public class UploadResource {
             fileInfo.setComplete(true);
             fileInfo.setServerPath(assembledFile.getAbsolutePath());
         }
-        return assembledFile;
     }
 
     private static void saveChunk(File dir, String fileName, long from, byte[] bytes) throws IOException {
@@ -178,7 +179,7 @@ public class UploadResource {
                         }
                     }
                 }
-                chunkFile.delete();
+                FileUtils.deleteQuietly(chunkFile);
             }
         }
         return assembledFile;

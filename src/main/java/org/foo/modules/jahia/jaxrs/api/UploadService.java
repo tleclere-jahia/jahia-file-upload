@@ -6,6 +6,7 @@ public interface UploadService {
     /**
      * Execute some custom code with the assembled file before deleting the folder
      * @param fileInfo the file info
+     * @return true if the file must be removed, false otherwise
      */
-    void uploadFile(FileInfo fileInfo);
+    boolean uploadFile(FileInfo fileInfo);
 }

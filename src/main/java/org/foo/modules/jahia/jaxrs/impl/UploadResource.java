@@ -5,6 +5,7 @@ import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.StringUtils;
 import org.foo.modules.jahia.jaxrs.api.FileInfo;
 import org.foo.modules.jahia.jaxrs.api.UploadService;
 import org.jahia.osgi.BundleUtils;
@@ -13,16 +14,16 @@ import org.slf4j.LoggerFactory;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.Consumes;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
+import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Path("/upload-file")
 @Produces({MediaType.APPLICATION_JSON})
@@ -49,52 +50,63 @@ public class UploadResource {
             chunkTo = Long.parseLong(fromAndTo[1]);
         }
 
-        UploadServiceRegistrator uploadServiceRegistrator = BundleUtils.getOsgiService(UploadServiceRegistrator.class, null);
-        if (uploadServiceRegistrator != null) {
-            List<UploadService> uploadServices = uploadServiceRegistrator.getUploadServices();
-            if (!uploadServices.isEmpty()) {
-                try {
-                    File tempDir = new File(System.getProperty("java.io.tmpdir"), httpServletRequest.getSession().getId());
-                    List<FileItem> items = new ServletFileUpload(new DiskFileItemFactory(10000000, tempDir)).parseRequest(httpServletRequest);
-                    Iterator<FileItem> it = items.iterator();
-                    List<FileInfo> filesInfo = new ArrayList<>();
-                    FileInfo fileInfo;
-                    Map<String, String> formData = new HashMap<>();
-                    while (it.hasNext()) {
-                        FileItem item = it.next();
-                        if (item.isFormField()) {
-                            formData.put(item.getFieldName(), item.getString());
-                        } else {
-                            fileInfo = new FileInfo(item.getName(), item.getContentType());
-                            writeFile(tempDir, item, fileInfo, fileFullLength, chunkFrom, chunkTo);
-                            filesInfo.add(fileInfo);
+        List<UploadService> uploadServices = BundleUtils.getOsgiService(UploadServiceRegistrator.class, null).getUploadServices();
+        try {
+            File tempDir = new File(System.getProperty("java.io.tmpdir"), UploadService.ROOT_FOLDER);
+            Map<Boolean, List<FileItem>> fileItems = new ServletFileUpload(new DiskFileItemFactory(10000000, tempDir)).parseRequest(httpServletRequest)
+                    .stream().collect(Collectors.groupingBy(FileItem::isFormField));
+            Map<String, String> formData = new HashMap<>();
+            fileItems.get(true).forEach(item -> formData.put(item.getFieldName(), item.getString()));
+            if (!formData.containsKey(UploadService.FORM_DATA_FILE)) {
+                return Response.serverError().build();
+            }
+            if (!uploadServices.stream().map(service -> service.checkFileExtension(formData)).reduce(false, (a, b) -> a || b)) {
+                logger.warn("File {} not allowed", formData.get(UploadService.FORM_DATA_FILE));
+                return Response.serverError().build();
+            }
+
+            int nbFiles = fileItems.get(false).size();
+            if (nbFiles > 1) {
+                logger.warn("Unable to deal multipe ({}) files ; only the first is uploaded.", nbFiles);
+            }
+            FileInfo fileInfo = new FileInfo(formData);
+
+            // TODO: Deal multiple files
+            Optional<FileItem> op = fileItems.get(false).stream().findFirst();
+            if (op.isPresent()) {
+                FileItem item = op.get();
+                fileInfo.setName(item.getName());
+                fileInfo.setType(item.getContentType());
+                for (UploadService uploadService : uploadServices) {
+                    if (uploadService.checkFileExtension(formData)) {
+                        tempDir = new File(System.getProperty("java.io.tmpdir"), UploadService.ROOT_FOLDER);
+                        String getTempFolderPropertyInFormData = uploadService.getTempFolderPropertyInFormData();
+                        if (getTempFolderPropertyInFormData != null && formData.containsKey(getTempFolderPropertyInFormData)) {
+                            tempDir = Files.createDirectories(Paths.get(tempDir.getAbsolutePath(), formData.get(getTempFolderPropertyInFormData).split("/"))).toFile();
+                        }
+                        File assembledFile = writeFile(tempDir, item, fileInfo, fileFullLength, chunkFrom, chunkTo);
+                        if (assembledFile != null && uploadService.uploadFile(fileInfo, assembledFile)) {
+                            FileUtils.deleteQuietly(assembledFile.getParentFile());
                         }
                     }
-                    filesInfo.forEach(fi -> {
-                        fi.setFormData(formData);
-                        if (fi.isComplete()) {
-                            boolean remove = true;
-                            for (UploadService uploadService : uploadServiceRegistrator.getUploadServices()) {
-                                if (uploadService.checkFileExtension(fi)) {
-                                    remove &= uploadService.uploadFile(fi);
-                                }
-                            }
-                            if (remove) {
-                                FileUtils.deleteQuietly(new File(fi.getServerPath()).getParentFile());
-                            }
-                        }
-                    });
-                    return Response.status(Response.Status.OK).entity(new ObjectMapper().writeValueAsString(filesInfo)).type(MediaType.APPLICATION_JSON).build();
-                } catch (Exception e) {
-                    logger.error("", e);
-                    return Response.serverError().build();
                 }
             }
+            return Response.status(Response.Status.OK).entity(new ObjectMapper().writeValueAsString(fileInfo)).type(MediaType.APPLICATION_JSON).build();
+        } catch (Exception e) {
+            logger.error("", e);
+            return Response.serverError().build();
         }
-        return Response.ok().build();
     }
 
-    private void writeFile(File tempDir, FileItem fileItem, FileInfo fileInfo, long fileFullLength, long chunkFrom, long chunkTo) throws Exception {
+    @GET
+    @Produces(MediaType.TEXT_PLAIN)
+    public long getFile(@QueryParam("path") String path, @Context HttpServletRequest httpServletRequest) {
+        File dir = Paths.get(System.getProperty("java.io.tmpdir"), UploadService.ROOT_FOLDER, path).toFile();
+        TreeMap<Long, Long> chunkStartsToLengths = getChunkStartsToLengths(dir, StringUtils.substringAfterLast(path, "/"));
+        return getCommonLength(chunkStartsToLengths);
+    }
+
+    private static File writeFile(File tempDir, FileItem fileItem, FileInfo fileInfo, long fileFullLength, long chunkFrom, long chunkTo) throws Exception {
         if (!tempDir.exists()) {
             if (!tempDir.mkdir()) {
                 throw new FileNotFoundException(tempDir.getAbsolutePath());
@@ -124,10 +136,7 @@ public class UploadResource {
                 assembledFile = assembleAndDeleteChunks(dir, fileItem.getName(), new ArrayList<>(chunkStartsToLengths.keySet()));
             }
         }
-        if (assembledFile != null) {
-            fileInfo.setComplete(true);
-            fileInfo.setServerPath(assembledFile.getAbsolutePath());
-        }
+        return assembledFile;
     }
 
     private static void saveChunk(File dir, String fileName, long from, byte[] bytes) throws IOException {

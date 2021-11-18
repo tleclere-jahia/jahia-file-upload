@@ -17,12 +17,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Paths;
+import java.util.Map;
 
 @Component(service = BackgroundJob.class, immediate = true)
 public class PurgeFileUploadJob extends BackgroundJob {
     private static Logger logger = LoggerFactory.getLogger(PurgeFileUploadJob.class);
 
-    private static final String CRON_EXPRESSION = "0 0 0 * * ?";
+    private static final String CONFIGURATION_KEY_CRON_EXPRESSION = "cron.expression";
 
     private SchedulerService schedulerService;
     private JobDetail jobDetail;
@@ -33,10 +34,10 @@ public class PurgeFileUploadJob extends BackgroundJob {
     }
 
     @Activate
-    public void start() throws Exception {
+    public void start(Map<String, ?> configuration) throws Exception {
         jobDetail = BackgroundJob.createJahiaJob("Purge uploaded files", PurgeFileUploadJob.class);
-        if (schedulerService.getAllJobs(jobDetail.getGroup()).isEmpty() && SettingsBean.getInstance().isProcessingServer()) {
-            Trigger trigger = new CronTrigger("PurgeFileUploadJob_trigger", jobDetail.getGroup(), CRON_EXPRESSION);
+        if (schedulerService.getAllJobs(jobDetail.getGroup()).isEmpty() && SettingsBean.getInstance().isProcessingServer() && configuration.containsKey(CONFIGURATION_KEY_CRON_EXPRESSION)) {
+            Trigger trigger = new CronTrigger("PurgeFileUploadJob_trigger", jobDetail.getGroup(), (String) configuration.get(CONFIGURATION_KEY_CRON_EXPRESSION));
             schedulerService.getScheduler().scheduleJob(jobDetail, trigger);
         }
     }

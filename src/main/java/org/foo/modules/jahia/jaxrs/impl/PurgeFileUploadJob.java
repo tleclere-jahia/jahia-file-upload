@@ -23,6 +23,7 @@ import java.util.Map;
 public class PurgeFileUploadJob extends BackgroundJob {
     private static Logger logger = LoggerFactory.getLogger(PurgeFileUploadJob.class);
 
+    private static final String CONFIGURATION_KEY_CRON_ENABLED = "cron.enabled";
     private static final String CONFIGURATION_KEY_CRON_EXPRESSION = "cron.expression";
 
     private SchedulerService schedulerService;
@@ -35,16 +36,18 @@ public class PurgeFileUploadJob extends BackgroundJob {
 
     @Activate
     public void start(Map<String, ?> configuration) throws Exception {
-        jobDetail = BackgroundJob.createJahiaJob("Purge uploaded files", PurgeFileUploadJob.class);
-        if (schedulerService.getAllJobs(jobDetail.getGroup()).isEmpty() && SettingsBean.getInstance().isProcessingServer() && configuration.containsKey(CONFIGURATION_KEY_CRON_EXPRESSION)) {
-            Trigger trigger = new CronTrigger("PurgeFileUploadJob_trigger", jobDetail.getGroup(), (String) configuration.get(CONFIGURATION_KEY_CRON_EXPRESSION));
-            schedulerService.getScheduler().scheduleJob(jobDetail, trigger);
+        if (configuration.containsKey(CONFIGURATION_KEY_CRON_ENABLED) && (Boolean) configuration.get(CONFIGURATION_KEY_CRON_ENABLED)) {
+            jobDetail = BackgroundJob.createJahiaJob("Purge uploaded files", PurgeFileUploadJob.class);
+            if (schedulerService.getAllJobs(jobDetail.getGroup()).isEmpty() && SettingsBean.getInstance().isProcessingServer() && configuration.containsKey(CONFIGURATION_KEY_CRON_EXPRESSION)) {
+                Trigger trigger = new CronTrigger("PurgeFileUploadJob_trigger", jobDetail.getGroup(), (String) configuration.get(CONFIGURATION_KEY_CRON_EXPRESSION));
+                schedulerService.getScheduler().scheduleJob(jobDetail, trigger);
+            }
         }
     }
 
     @Deactivate
     public void stop() throws Exception {
-        if (!schedulerService.getAllJobs(jobDetail.getGroup()).isEmpty() && SettingsBean.getInstance().isProcessingServer()) {
+        if (jobDetail != null && !schedulerService.getAllJobs(jobDetail.getGroup()).isEmpty() && SettingsBean.getInstance().isProcessingServer()) {
             schedulerService.getScheduler().deleteJob(jobDetail.getName(), jobDetail.getGroup());
         }
     }

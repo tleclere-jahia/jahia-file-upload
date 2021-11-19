@@ -1,6 +1,7 @@
 package org.foo.modules.jahia.jaxrs.api;
 
-import java.io.File;
+import org.jahia.services.content.JCRNodeWrapper;
+
 import java.util.Map;
 
 public interface UploadService {
@@ -23,8 +24,8 @@ public interface UploadService {
      * Execute some custom code with the assembled file before deleting the folder
      *
      * @param fileInfo      the file info
-     * @param assembledFile the assembled file
+     * @param assembledFile the assembled file as an external node
      * @return true if the file must be removed, false otherwise
      */
-    boolean uploadFile(FileInfo fileInfo, File assembledFile);
+    boolean uploadFile(FileInfo fileInfo, JCRNodeWrapper assembledFile);
 }

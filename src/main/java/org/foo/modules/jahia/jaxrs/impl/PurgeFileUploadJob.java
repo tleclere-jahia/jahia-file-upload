@@ -1,7 +1,6 @@
 package org.foo.modules.jahia.jaxrs.impl;
 
-import org.apache.commons.io.FileUtils;
-import org.foo.modules.jahia.jaxrs.api.UploadService;
+import org.jahia.services.content.JCRTemplate;
 import org.jahia.services.scheduler.BackgroundJob;
 import org.jahia.services.scheduler.SchedulerService;
 import org.jahia.settings.SettingsBean;
@@ -16,7 +15,7 @@ import org.quartz.Trigger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Paths;
+import javax.jcr.RepositoryException;
 import java.util.Map;
 
 @Component(service = BackgroundJob.class, immediate = true)
@@ -28,15 +27,27 @@ public class PurgeFileUploadJob extends BackgroundJob {
 
     private SchedulerService schedulerService;
     private JobDetail jobDetail;
+    private UploadServiceRegistrator uploadServiceRegistrator;
+    private JCRTemplate jcrTemplate;
 
     @Reference
-    public void setSchedulerService(SchedulerService schedulerService) {
+    private void setSchedulerService(SchedulerService schedulerService) {
         this.schedulerService = schedulerService;
     }
 
+    @Reference
+    private void setUploadServiceRegistrator(UploadServiceRegistrator uploadServiceRegistrator) {
+        this.uploadServiceRegistrator = uploadServiceRegistrator;
+    }
+
+    @Reference
+    private void setJcrTemplate(JCRTemplate jcrTemplate) {
+        this.jcrTemplate = jcrTemplate;
+    }
+
     @Activate
-    public void start(Map<String, ?> configuration) throws Exception {
-        if (configuration.containsKey(CONFIGURATION_KEY_CRON_ENABLED) && (Boolean) configuration.get(CONFIGURATION_KEY_CRON_ENABLED)) {
+    private void start(Map<String, ?> configuration) throws Exception {
+        if (configuration.containsKey(CONFIGURATION_KEY_CRON_ENABLED) && "true".equalsIgnoreCase((String) configuration.get(CONFIGURATION_KEY_CRON_ENABLED))) {
             jobDetail = BackgroundJob.createJahiaJob("Purge uploaded files", PurgeFileUploadJob.class);
             if (schedulerService.getAllJobs(jobDetail.getGroup()).isEmpty() && SettingsBean.getInstance().isProcessingServer() && configuration.containsKey(CONFIGURATION_KEY_CRON_EXPRESSION)) {
                 Trigger trigger = new CronTrigger("PurgeFileUploadJob_trigger", jobDetail.getGroup(), (String) configuration.get(CONFIGURATION_KEY_CRON_EXPRESSION));
@@ -46,7 +57,7 @@ public class PurgeFileUploadJob extends BackgroundJob {
     }
 
     @Deactivate
-    public void stop() throws Exception {
+    private void stop() throws Exception {
         if (jobDetail != null && !schedulerService.getAllJobs(jobDetail.getGroup()).isEmpty() && SettingsBean.getInstance().isProcessingServer()) {
             schedulerService.getScheduler().deleteJob(jobDetail.getName(), jobDetail.getGroup());
         }
@@ -55,6 +66,16 @@ public class PurgeFileUploadJob extends BackgroundJob {
     @Override
     public void executeJahiaJob(JobExecutionContext jobExecutionContext) {
         logger.info("Purge uploaded files");
-        FileUtils.deleteQuietly(Paths.get(System.getProperty("java.io.tmpdir"), UploadService.ROOT_FOLDER).toFile());
+        try {
+            jcrTemplate.doExecuteWithSystemSession(systemSession -> {
+                String folderNodePath = uploadServiceRegistrator.getFolderNodePath();
+                if (folderNodePath != null && systemSession.nodeExists(folderNodePath)) {
+                    systemSession.getNode(folderNodePath).remove();
+                }
+                return null;
+            });
+        } catch (RepositoryException e) {
+            logger.error("", e);
+        }
     }
 }

@@ -1,5 +1,6 @@
 package org.foo.modules.jahia.jaxrs.impl;
 
+import org.foo.modules.jahia.jaxrs.api.UploadServiceRegistrator;
 import org.jahia.services.content.JCRTemplate;
 import org.jahia.services.scheduler.BackgroundJob;
 import org.jahia.services.scheduler.SchedulerService;
@@ -28,7 +29,6 @@ public class PurgeFileUploadJob extends BackgroundJob {
     private SchedulerService schedulerService;
     private JobDetail jobDetail;
     private UploadServiceRegistrator uploadServiceRegistrator;
-    private JCRTemplate jcrTemplate;
 
     @Reference
     private void setSchedulerService(SchedulerService schedulerService) {
@@ -38,11 +38,6 @@ public class PurgeFileUploadJob extends BackgroundJob {
     @Reference
     private void setUploadServiceRegistrator(UploadServiceRegistrator uploadServiceRegistrator) {
         this.uploadServiceRegistrator = uploadServiceRegistrator;
-    }
-
-    @Reference
-    private void setJcrTemplate(JCRTemplate jcrTemplate) {
-        this.jcrTemplate = jcrTemplate;
     }
 
     @Activate
@@ -67,7 +62,7 @@ public class PurgeFileUploadJob extends BackgroundJob {
     public void executeJahiaJob(JobExecutionContext jobExecutionContext) {
         logger.info("Purge uploaded files");
         try {
-            jcrTemplate.doExecuteWithSystemSession(systemSession -> {
+            JCRTemplate.getInstance().doExecuteWithSystemSession(systemSession -> {
                 String folderNodePath = uploadServiceRegistrator.getFolderNodePath();
                 if (folderNodePath != null && systemSession.nodeExists(folderNodePath)) {
                     systemSession.getNode(folderNodePath).remove();

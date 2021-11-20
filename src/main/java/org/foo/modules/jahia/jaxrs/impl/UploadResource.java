@@ -8,6 +8,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.foo.modules.jahia.jaxrs.api.FileInfo;
 import org.foo.modules.jahia.jaxrs.api.UploadService;
+import org.foo.modules.jahia.jaxrs.api.UploadServiceRegistrator;
 import org.jahia.api.Constants;
 import org.jahia.osgi.BundleUtils;
 import org.jahia.services.content.JCRNodeIteratorWrapper;

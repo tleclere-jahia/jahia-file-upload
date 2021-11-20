@@ -1,6 +1,5 @@
-package org.foo.modules.jahia.jaxrs.impl;
+package org.foo.modules.jahia.jaxrs.api;
 
-import org.foo.modules.jahia.jaxrs.api.UploadService;
 import org.jahia.api.Constants;
 import org.jahia.osgi.BundleUtils;
 import org.jahia.services.content.JCRNodeWrapper;
@@ -33,7 +32,7 @@ public class UploadServiceRegistrator {
     }
 
     @Activate
-    private void onActivate(Map<String, ?> configuration) throws BundleException {
+    private void onActivate(Map<String, ?> configuration) {
         if (configuration.containsKey(CONFIGURATION_JCRFOLDER_PATH)) {
             try {
                 folderNodePath = jcrTemplate.doExecuteWithSystemSession(systemSession -> {

@@ -8,9 +8,9 @@ public class FileInfo {
     private String type;
     private long size;
     private boolean complete;
-    private final Map<String, String> formData;
+    private final Map<String, Object> formData;
 
-    public FileInfo(Map<String, String> formData) {
+    public FileInfo(Map<String, Object> formData) {
         this.formData = formData;
     }
 
@@ -46,7 +46,7 @@ public class FileInfo {
         this.complete = complete;
     }
 
-    public Map<String, String> getFormData() {
+    public Map<String, Object> getFormData() {
         return Collections.unmodifiableMap(formData);
     }
 }

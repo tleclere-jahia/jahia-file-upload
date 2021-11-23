@@ -72,8 +72,13 @@ public class UploadResource {
                     try {
                         Map<Boolean, List<FileItem>> fileItems = new ServletFileUpload(new DiskFileItemFactory(10000000, ROOT_FOLER))
                                 .parseRequest(httpServletRequest).stream().collect(Collectors.groupingBy(FileItem::isFormField));
-                        Map<String, String> formData = new HashMap<>();
+                        Map<String, Object> formData = new HashMap<>();
                         fileItems.get(true).forEach(item -> formData.put(item.getFieldName(), item.getString()));
+                        if (fileFullLength >= 0) {
+                            formData.put(UploadService.FORM_DATA_SIZE, fileFullLength);
+                        } else if (!fileItems.get(false).isEmpty()) {
+                            formData.put(UploadService.FORM_DATA_SIZE, fileItems.get(false).get(0).getSize());
+                        }
                         if (!formData.containsKey(UploadService.FORM_DATA_FILE)) {
                             return Response.serverError().build();
                         }
@@ -99,7 +104,7 @@ public class UploadResource {
                                     folderNode = systemSession.getNode(folderNodePath);
                                     String getTempFolderPropertyInFormData = uploadService.getTempFolderPropertyInFormData();
                                     if (getTempFolderPropertyInFormData != null && formData.containsKey(getTempFolderPropertyInFormData)) {
-                                        folderNode = createFolderFromPath(folderNode, formData.get(getTempFolderPropertyInFormData).split("/"));
+                                        folderNode = createFolderFromPath(folderNode, ((String) formData.get(getTempFolderPropertyInFormData)).split("/"));
                                     }
                                     JCRNodeWrapper assembledFile = writeFile(folderNode, item, fileInfo, fileFullLength, chunkFrom, chunkTo);
                                     if (assembledFile != null) {

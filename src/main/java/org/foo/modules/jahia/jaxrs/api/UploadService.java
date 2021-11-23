@@ -7,6 +7,7 @@ import java.util.Map;
 public interface UploadService {
     String ROOT_FOLDER = "file-upload";
     String FORM_DATA_FILE = "file";
+    String FORM_DATA_SIZE = "size";
 
     /***
      * @return property in the form data where to save temporary file
@@ -15,10 +16,11 @@ public interface UploadService {
 
     /***
      * Check if the file has the good extension
+     * @see UploadService.FORM_DATA_SIZE be careful size could be null
      * @param formData the form data
      * @return true if the extension is accepted, false otherwiser
      */
-    boolean checkFileExtension(Map<String, String> formData);
+    boolean checkFileExtension(Map<String, Object> formData);
 
     /**
      * Execute some custom code with the assembled file before deleting the folder

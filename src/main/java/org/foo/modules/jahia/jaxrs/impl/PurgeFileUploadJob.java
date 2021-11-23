@@ -1,6 +1,7 @@
 package org.foo.modules.jahia.jaxrs.impl;
 
 import org.foo.modules.jahia.jaxrs.api.UploadServiceRegistrator;
+import org.jahia.osgi.BundleUtils;
 import org.jahia.services.content.JCRTemplate;
 import org.jahia.services.scheduler.BackgroundJob;
 import org.jahia.services.scheduler.SchedulerService;
@@ -21,23 +22,17 @@ import java.util.Map;
 
 @Component(service = BackgroundJob.class, immediate = true)
 public class PurgeFileUploadJob extends BackgroundJob {
-    private static Logger logger = LoggerFactory.getLogger(PurgeFileUploadJob.class);
+    private static final Logger logger = LoggerFactory.getLogger(PurgeFileUploadJob.class);
 
     private static final String CONFIGURATION_KEY_CRON_ENABLED = "cron.enabled";
     private static final String CONFIGURATION_KEY_CRON_EXPRESSION = "cron.expression";
 
     private SchedulerService schedulerService;
     private JobDetail jobDetail;
-    private UploadServiceRegistrator uploadServiceRegistrator;
 
     @Reference
     private void setSchedulerService(SchedulerService schedulerService) {
         this.schedulerService = schedulerService;
-    }
-
-    @Reference
-    private void setUploadServiceRegistrator(UploadServiceRegistrator uploadServiceRegistrator) {
-        this.uploadServiceRegistrator = uploadServiceRegistrator;
     }
 
     @Activate
@@ -61,16 +56,19 @@ public class PurgeFileUploadJob extends BackgroundJob {
     @Override
     public void executeJahiaJob(JobExecutionContext jobExecutionContext) {
         logger.info("Purge uploaded files");
-        try {
-            JCRTemplate.getInstance().doExecuteWithSystemSession(systemSession -> {
-                String folderNodePath = uploadServiceRegistrator.getFolderNodePath();
-                if (folderNodePath != null && systemSession.nodeExists(folderNodePath)) {
-                    systemSession.getNode(folderNodePath).remove();
-                }
-                return null;
-            });
-        } catch (RepositoryException e) {
-            logger.error("", e);
+        UploadServiceRegistrator uploadServiceRegistrator = BundleUtils.getOsgiService(UploadServiceRegistrator.class, null);
+        if (uploadServiceRegistrator != null) {
+            try {
+                JCRTemplate.getInstance().doExecuteWithSystemSession(systemSession -> {
+                    String folderNodePath = uploadServiceRegistrator.getFolderNodePath();
+                    if (folderNodePath != null && systemSession.nodeExists(folderNodePath)) {
+                        systemSession.getNode(folderNodePath).remove();
+                    }
+                    return null;
+                });
+            } catch (RepositoryException e) {
+                logger.error("", e);
+            }
         }
     }
 }

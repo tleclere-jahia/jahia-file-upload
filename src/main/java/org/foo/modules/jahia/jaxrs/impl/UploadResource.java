@@ -42,13 +42,12 @@ public class UploadResource {
     @Consumes({MediaType.MULTIPART_FORM_DATA})
     public Response uploadFile(@Context HttpServletRequest httpServletRequest) {
         try {
-            if (!ROOT_FOLER.exists()) {
-                if (!ROOT_FOLER.mkdir()) {
-                    return Response.serverError().entity(String.format("Unable to create temp folder: %s", ROOT_FOLER.getAbsolutePath())).build();
-                }
+            if (!ROOT_FOLER.exists() && !ROOT_FOLER.mkdir()) {
+                return Response.serverError().entity(String.format("Unable to create temp folder: %s", ROOT_FOLER.getAbsolutePath())).build();
             }
 
-            FileInfo result = (FileInfo) JCRTemplate.getInstance().doExecuteWithSystemSession(systemSession -> {
+            UploadServiceRegistrator uploadServiceRegistrator = BundleUtils.getOsgiService(UploadServiceRegistrator.class, null);
+            FileInfo result = (FileInfo) JCRTemplate.getInstance().doExecuteWithSystemSessionAsUser(null, uploadServiceRegistrator.getWorkspace(), Locale.FRENCH, systemSession -> {
                 String contentRange = httpServletRequest.getHeader(CONTENT_RANGE);
                 long fileFullLength = -1;
                 long chunkFrom = -1;
@@ -64,7 +63,6 @@ public class UploadResource {
                     chunkTo = Long.parseLong(fromAndTo[1]);
                 }
 
-                UploadServiceRegistrator uploadServiceRegistrator = BundleUtils.getOsgiService(UploadServiceRegistrator.class, null);
                 String folderNodePath = uploadServiceRegistrator.getFolderNodePath();
                 if (folderNodePath != null && systemSession.nodeExists(folderNodePath)) {
                     List<UploadService> uploadServices = uploadServiceRegistrator.getUploadServices();
@@ -136,7 +134,8 @@ public class UploadResource {
     @Produces(MediaType.TEXT_PLAIN)
     public Long getFile(@QueryParam("path") String path, @Context HttpServletRequest httpServletRequest) {
         try {
-            return JCRTemplate.getInstance().doExecuteWithSystemSession(systemSession -> {
+            UploadServiceRegistrator uploadServiceRegistrator = BundleUtils.getOsgiService(UploadServiceRegistrator.class, null);
+            return JCRTemplate.getInstance().doExecuteWithSystemSessionAsUser(null, uploadServiceRegistrator.getWorkspace(), Locale.FRENCH, systemSession -> {
                 String folderNodePath = BundleUtils.getOsgiService(UploadServiceRegistrator.class, null).getFolderNodePath();
                 if (folderNodePath == null) {
                     return 0L;

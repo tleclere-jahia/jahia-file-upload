@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.jcr.RepositoryException;
+import java.util.Locale;
 import java.util.Map;
 
 @Component(service = BackgroundJob.class, immediate = true)
@@ -59,7 +60,7 @@ public class PurgeFileUploadJob extends BackgroundJob {
         UploadServiceRegistrator uploadServiceRegistrator = BundleUtils.getOsgiService(UploadServiceRegistrator.class, null);
         if (uploadServiceRegistrator != null) {
             try {
-                JCRTemplate.getInstance().doExecuteWithSystemSession(systemSession -> {
+                JCRTemplate.getInstance().doExecuteWithSystemSessionAsUser(null, uploadServiceRegistrator.getWorkspace(), Locale.FRENCH, systemSession -> {
                     String folderNodePath = uploadServiceRegistrator.getFolderNodePath();
                     if (folderNodePath != null && systemSession.nodeExists(folderNodePath)) {
                         systemSession.getNode(folderNodePath).remove();

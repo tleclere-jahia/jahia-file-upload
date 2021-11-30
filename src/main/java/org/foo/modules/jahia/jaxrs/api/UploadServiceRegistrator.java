@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import javax.jcr.RepositoryException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -22,10 +23,12 @@ public class UploadServiceRegistrator {
     private static final Logger logger = LoggerFactory.getLogger(UploadServiceRegistrator.class);
 
     public static final String CONFIGURATION_JCRFOLDER_PATH = "jcrFolderPath";
+    public static final String CONFIGURATION_WORKSPACE = "workspace";
 
     private final List<UploadService> uploadServices;
     private JCRTemplate jcrTemplate;
     private String folderNodePath;
+    private String workspace;
 
     public UploadServiceRegistrator() {
         uploadServices = new CopyOnWriteArrayList<>();
@@ -33,9 +36,12 @@ public class UploadServiceRegistrator {
 
     @Activate
     private void onActivate(Map<String, ?> configuration) {
+        if (configuration.containsKey(CONFIGURATION_WORKSPACE)) {
+            workspace = (String) configuration.get(CONFIGURATION_WORKSPACE);
+        }
         if (configuration.containsKey(CONFIGURATION_JCRFOLDER_PATH)) {
             try {
-                folderNodePath = jcrTemplate.doExecuteWithSystemSession(systemSession -> {
+                folderNodePath = jcrTemplate.doExecuteWithSystemSessionAsUser(null, getWorkspace(), Locale.FRENCH, systemSession -> {
                     if (!systemSession.nodeExists((String) configuration.get(CONFIGURATION_JCRFOLDER_PATH))) {
                         return null;
                     }
@@ -81,5 +87,9 @@ public class UploadServiceRegistrator {
 
     public String getFolderNodePath() {
         return folderNodePath;
+    }
+
+    public String getWorkspace() {
+        return workspace == null ? Constants.EDIT_WORKSPACE : workspace;
     }
 }
